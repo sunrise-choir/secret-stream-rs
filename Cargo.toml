@@ -1,0 +1,12 @@
+[package]
+name = "secret-stream"
+version = "0.1.0"
+authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
+description = "Convenient combination of secret-handshake and box-stream."
+repository = "https://github.com/AljoschaMeyer/secret-stream-rs"
+readme = "README.md"
+license = "GPL-3.0"
+
+[dependencies]
+secret_handshake = "2.0.0"
+box_stream = "0.3.0"
