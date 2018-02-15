@@ -8,5 +8,8 @@ readme = "README.md"
 license = "GPL-3.0"
 
 [dependencies]
-secret_handshake = "2.0.0"
+futures = "0.1.17"
+tokio-io = "0.1.5"
+sodiumoxide = "0.0.15"
+secret_handshake = "3.0.0"
 box_stream = "0.3.0"
