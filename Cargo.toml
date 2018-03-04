@@ -1,6 +1,6 @@
 [package]
 name = "secret_stream"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
 description = "Convenient combination of secret-handshake and box-stream."
 repository = "https://github.com/AljoschaMeyer/secret-stream-rs"
