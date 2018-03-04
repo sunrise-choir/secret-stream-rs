@@ -168,6 +168,59 @@ impl<'a, S: AsyncRead + AsyncWrite> Future for Server<'a, S> {
     }
 }
 
+/// A future that accepts a secret-handshake and then yields a channel that
+/// encrypts/decrypts all data via box-stream.
+///
+/// This copies the handshake keys so that it is not constrained by the key's lifetime.
+pub struct OwningServer<S>(OwningServerHandshaker<S>);
+
+impl<S: AsyncRead + AsyncWrite> OwningServer<S> {
+    /// Create a new `Server` to accept a connection from a client which knows
+    /// the server's public key and uses the right app key over the given
+    /// `stream`.
+    ///
+    /// This copies the handshake keys so that it is not constrained by the key's lifetime.
+    ///
+    /// Ephemeral keypairs can be generated via
+    /// `sodiumoxide::crypto::box_::gen_keypair`.
+    pub fn new(stream: S,
+               network_identifier: &[u8; NETWORK_IDENTIFIER_BYTES],
+               server_longterm_pk: &sign::PublicKey,
+               server_longterm_sk: &sign::SecretKey,
+               server_ephemeral_pk: &box_::PublicKey,
+               server_ephemeral_sk: &box_::SecretKey)
+               -> OwningServer<S> {
+        OwningServer(OwningServerHandshaker::new(stream,
+                                                 network_identifier,
+                                                 server_longterm_pk,
+                                                 server_longterm_sk,
+                                                 &server_ephemeral_pk,
+                                                 &server_ephemeral_sk))
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite> Future for OwningServer<S> {
+    /// On success, the result contains the encrypted connection and the
+    /// longterm public key of the client.
+    type Item = Result<(BoxDuplex<S>, sign::PublicKey), (ServerHandshakeFailure, S)>;
+    type Error = (io::Error, S);
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let (res, stream) = try_ready!(self.0.poll());
+        match res {
+            Ok(outcome) => {
+                Ok(Async::Ready(Ok((BoxDuplex::new(stream,
+                                                   outcome.encryption_key(),
+                                                   outcome.decryption_key(),
+                                                   outcome.encryption_nonce(),
+                                                   outcome.decryption_nonce()),
+                                    outcome.peer_longterm_pk()))))
+            }
+            Err(failure) => Ok(Async::Ready(Err((failure, stream)))),
+        }
+    }
+}
+
 /// A future that accepts a secret-handshake based on a filter function and then
 /// yields a channel that encrypts/decrypts all data via box-stream.
 pub struct ServerFilter<'a, S, FilterFn, AsyncBool>(ServerHandshakerWithFilter<'a,
@@ -205,6 +258,71 @@ impl<'a, S, FilterFn, AsyncBool> ServerFilter<'a, S, FilterFn, AsyncBool>
 }
 
 impl<'a, S, FilterFn, AsyncBool> Future for ServerFilter<'a, S, FilterFn, AsyncBool>
+    where S: AsyncRead + AsyncWrite,
+          FilterFn: FnOnce(&sign::PublicKey) -> AsyncBool,
+          AsyncBool: Future<Item = bool>
+{
+    /// On success, the result contains the encrypted connection and the
+    /// longterm public key of the client.
+    type Item = Result<(BoxDuplex<S>, sign::PublicKey), (ServerHandshakeFailureWithFilter, S)>;
+    type Error = (ServerHandshakeError<AsyncBool::Error>, S);
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let (res, stream) = try_ready!(self.0.poll());
+        match res {
+            Ok(outcome) => {
+                Ok(Async::Ready(Ok((BoxDuplex::new(stream,
+                                                   outcome.encryption_key(),
+                                                   outcome.decryption_key(),
+                                                   outcome.encryption_nonce(),
+                                                   outcome.decryption_nonce()),
+                                    outcome.peer_longterm_pk()))))
+            }
+            Err(failure) => Ok(Async::Ready(Err((failure, stream)))),
+        }
+    }
+}
+
+/// A future that accepts a secret-handshake based on a filter function and then
+/// yields a channel that encrypts/decrypts all data via box-stream.
+///
+/// This copies the handshake keys so that it is not constrained by the key's lifetime.
+pub struct OwningServerFilter<S, FilterFn, AsyncBool>(OwningServerHandshakerWithFilter<S,
+                                                                                FilterFn,
+                                                                                AsyncBool>);
+
+impl<S, FilterFn, AsyncBool> OwningServerFilter<S, FilterFn, AsyncBool>
+    where S: AsyncRead + AsyncWrite,
+          FilterFn: FnOnce(&sign::PublicKey) -> AsyncBool,
+          AsyncBool: Future<Item = bool>
+{
+    /// Create a new `Server` to accept a connection from a client which knows
+    /// the server's public key, uses the right app key over the given `stream`
+    /// and whose longterm public key is accepted by the filter function.
+    ///
+    /// This copies the handshake keys so that it is not constrained by the key's lifetime.
+    ///
+    /// Ephemeral keypairs can be generated via
+    /// `sodiumoxide::crypto::box_::gen_keypair`.
+    pub fn new(stream: S,
+               filter_fn: FilterFn,
+               network_identifier: &[u8; NETWORK_IDENTIFIER_BYTES],
+               server_longterm_pk: &sign::PublicKey,
+               server_longterm_sk: &sign::SecretKey,
+               server_ephemeral_pk: &box_::PublicKey,
+               server_ephemeral_sk: &box_::SecretKey)
+               -> OwningServerFilter<S, FilterFn, AsyncBool> {
+        OwningServerFilter(OwningServerHandshakerWithFilter::new(stream,
+                                                                 filter_fn,
+                                                                 network_identifier,
+                                                                 server_longterm_pk,
+                                                                 server_longterm_sk,
+                                                                 &server_ephemeral_pk,
+                                                                 &server_ephemeral_sk))
+    }
+}
+
+impl<S, FilterFn, AsyncBool> Future for OwningServerFilter<S, FilterFn, AsyncBool>
     where S: AsyncRead + AsyncWrite,
           FilterFn: FnOnce(&sign::PublicKey) -> AsyncBool,
           AsyncBool: Future<Item = bool>
