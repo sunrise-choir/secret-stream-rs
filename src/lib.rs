@@ -68,6 +68,57 @@ impl<'a, S: AsyncRead + AsyncWrite> Future for Client<'a, S> {
     }
 }
 
+/// A future that initiates a secret-handshake and then yields a channel that
+/// encrypts/decrypts all data via box-stream.
+///
+/// This copies the handshake keys so that it is not constrained by the key's lifetime.
+pub struct OwningClient<S>(OwningClientHandshaker<S>);
+
+impl<S: AsyncRead + AsyncWrite> OwningClient<S> {
+    /// Create a new `OwningClient` to connect to a server with known public key
+    /// and app key over the given `stream`.
+    ///
+    /// This copies the handshake keys so that it is not constrained by the key's lifetime.
+    ///
+    /// Ephemeral keypairs can be generated via
+    /// `sodiumoxide::crypto::box_::gen_keypair`.
+    pub fn new(stream: S,
+               network_identifier: &[u8; NETWORK_IDENTIFIER_BYTES],
+               client_longterm_pk: &sign::PublicKey,
+               client_longterm_sk: &sign::SecretKey,
+               client_ephemeral_pk: &box_::PublicKey,
+               client_ephemeral_sk: &box_::SecretKey,
+               server_longterm_pk: &sign::PublicKey)
+               -> OwningClient<S> {
+        OwningClient(OwningClientHandshaker::new(stream,
+                                                 network_identifier,
+                                                 client_longterm_pk,
+                                                 client_longterm_sk,
+                                                 client_ephemeral_pk,
+                                                 client_ephemeral_sk,
+                                                 server_longterm_pk))
+    }
+}
+
+impl<S: AsyncRead + AsyncWrite> Future for OwningClient<S> {
+    type Item = Result<BoxDuplex<S>, (ClientHandshakeFailure, S)>;
+    type Error = (io::Error, S);
+
+    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
+        let (res, stream) = try_ready!(self.0.poll());
+        match res {
+            Ok(outcome) => {
+                Ok(Async::Ready(Ok(BoxDuplex::new(stream,
+                                                  outcome.encryption_key(),
+                                                  outcome.decryption_key(),
+                                                  outcome.encryption_nonce(),
+                                                  outcome.decryption_nonce()))))
+            }
+            Err(failure) => Ok(Async::Ready(Err((failure, stream)))),
+        }
+    }
+}
+
 /// A future that accepts a secret-handshake and then yields a channel that
 /// encrypts/decrypts all data via box-stream.
 pub struct Server<'a, S>(ServerHandshaker<'a, S>);

@@ -11,5 +11,5 @@ license = "GPL-3.0"
 futures = "0.1.17"
 tokio-io = "0.1.5"
 sodiumoxide = "0.0.16"
-secret_handshake = "3.0.1"
+secret_handshake = { git = "https://github.com/AljoschaMeyer/secret-handshake-rs" }
 box_stream = "0.4.0"
