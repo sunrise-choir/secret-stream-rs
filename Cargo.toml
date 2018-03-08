@@ -1,6 +1,6 @@
 [package]
 name = "secret_stream"
-version = "0.1.2"
+version = "0.2.0"
 authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
 description = "Convenient combination of secret-handshake and box-stream."
 repository = "https://github.com/AljoschaMeyer/secret-stream-rs"
@@ -11,5 +11,5 @@ license = "GPL-3.0"
 futures = "0.1.17"
 tokio-io = "0.1.5"
 sodiumoxide = "0.0.16"
-secret_handshake = { git = "https://github.com/AljoschaMeyer/secret-handshake-rs" }
+secret_handshake = "4.0.0"
 box_stream = "0.4.0"
