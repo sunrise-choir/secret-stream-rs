@@ -83,12 +83,12 @@ impl<S: AsyncRead + AsyncWrite> OwningClient<S> {
     /// Ephemeral keypairs can be generated via
     /// `sodiumoxide::crypto::box_::gen_keypair`.
     pub fn new(stream: S,
-               network_identifier: &[u8; NETWORK_IDENTIFIER_BYTES],
-               client_longterm_pk: &sign::PublicKey,
-               client_longterm_sk: &sign::SecretKey,
-               client_ephemeral_pk: &box_::PublicKey,
-               client_ephemeral_sk: &box_::SecretKey,
-               server_longterm_pk: &sign::PublicKey)
+               network_identifier: [u8; NETWORK_IDENTIFIER_BYTES],
+               client_longterm_pk: sign::PublicKey,
+               client_longterm_sk: sign::SecretKey,
+               client_ephemeral_pk: box_::PublicKey,
+               client_ephemeral_sk: box_::SecretKey,
+               server_longterm_pk: sign::PublicKey)
                -> OwningClient<S> {
         OwningClient(OwningClientHandshaker::new(stream,
                                                  network_identifier,
@@ -184,18 +184,18 @@ impl<S: AsyncRead + AsyncWrite> OwningServer<S> {
     /// Ephemeral keypairs can be generated via
     /// `sodiumoxide::crypto::box_::gen_keypair`.
     pub fn new(stream: S,
-               network_identifier: &[u8; NETWORK_IDENTIFIER_BYTES],
-               server_longterm_pk: &sign::PublicKey,
-               server_longterm_sk: &sign::SecretKey,
-               server_ephemeral_pk: &box_::PublicKey,
-               server_ephemeral_sk: &box_::SecretKey)
+               network_identifier: [u8; NETWORK_IDENTIFIER_BYTES],
+               server_longterm_pk: sign::PublicKey,
+               server_longterm_sk: sign::SecretKey,
+               server_ephemeral_pk: box_::PublicKey,
+               server_ephemeral_sk: box_::SecretKey)
                -> OwningServer<S> {
         OwningServer(OwningServerHandshaker::new(stream,
                                                  network_identifier,
                                                  server_longterm_pk,
                                                  server_longterm_sk,
-                                                 &server_ephemeral_pk,
-                                                 &server_ephemeral_sk))
+                                                 server_ephemeral_pk,
+                                                 server_ephemeral_sk))
     }
 }
 
@@ -306,19 +306,19 @@ impl<S, FilterFn, AsyncBool> OwningServerFilter<S, FilterFn, AsyncBool>
     /// `sodiumoxide::crypto::box_::gen_keypair`.
     pub fn new(stream: S,
                filter_fn: FilterFn,
-               network_identifier: &[u8; NETWORK_IDENTIFIER_BYTES],
-               server_longterm_pk: &sign::PublicKey,
-               server_longterm_sk: &sign::SecretKey,
-               server_ephemeral_pk: &box_::PublicKey,
-               server_ephemeral_sk: &box_::SecretKey)
+               network_identifier: [u8; NETWORK_IDENTIFIER_BYTES],
+               server_longterm_pk: sign::PublicKey,
+               server_longterm_sk: sign::SecretKey,
+               server_ephemeral_pk: box_::PublicKey,
+               server_ephemeral_sk: box_::SecretKey)
                -> OwningServerFilter<S, FilterFn, AsyncBool> {
         OwningServerFilter(OwningServerHandshakerWithFilter::new(stream,
                                                                  filter_fn,
                                                                  network_identifier,
                                                                  server_longterm_pk,
                                                                  server_longterm_sk,
-                                                                 &server_ephemeral_pk,
-                                                                 &server_ephemeral_sk))
+                                                                 server_ephemeral_pk,
+                                                                 server_ephemeral_sk))
     }
 }
 
