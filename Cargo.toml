@@ -5,7 +5,7 @@ authors = ["AljoschaMeyer <mail@aljoscha-meyer.de>"]
 description = "Convenient combination of secret-handshake and box-stream."
 repository = "https://github.com/AljoschaMeyer/secret-stream-rs"
 readme = "README.md"
-license = "GPL-3.0"
+license = "AGPL-3.0"
 
 [dependencies]
 futures = "0.1.17"
