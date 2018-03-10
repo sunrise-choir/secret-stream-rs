@@ -9,16 +9,17 @@
 extern crate secret_handshake;
 extern crate box_stream;
 #[macro_use]
-extern crate futures;
-extern crate tokio_io;
+extern crate futures_core;
+extern crate futures_io;
 extern crate sodiumoxide;
 
-use std::io;
-
-use futures::{Future, Async, Poll};
-use tokio_io::{AsyncRead, AsyncWrite};
+use futures_core::{Future, Poll};
+use futures_core::Async::Ready;
+use futures_core::task::Context;
+use futures_io::{AsyncRead, AsyncWrite};
 use sodiumoxide::crypto::{sign, box_};
 use secret_handshake::*;
+use secret_handshake::errors::*;
 use box_stream::*;
 
 /// A future that initiates a secret-handshake and then yields a channel that
@@ -50,21 +51,16 @@ impl<'a, S: AsyncRead + AsyncWrite> Client<'a, S> {
 }
 
 impl<'a, S: AsyncRead + AsyncWrite> Future for Client<'a, S> {
-    type Item = Result<BoxDuplex<S>, (ClientHandshakeFailure, S)>;
-    type Error = (io::Error, S);
+    type Item = BoxDuplex<S>;
+    type Error = (HandshakeError, S);
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let (res, stream) = try_ready!(self.0.poll());
-        match res {
-            Ok(outcome) => {
-                Ok(Async::Ready(Ok(BoxDuplex::new(stream,
-                                                  outcome.encryption_key(),
-                                                  outcome.decryption_key(),
-                                                  outcome.encryption_nonce(),
-                                                  outcome.decryption_nonce()))))
-            }
-            Err(failure) => Ok(Async::Ready(Err((failure, stream)))),
-        }
+    fn poll(&mut self, cx: &mut Context) -> Poll<Self::Item, Self::Error> {
+        let (outcome, stream) = try_ready!(self.0.poll(cx));
+        Ok(Ready(BoxDuplex::new(stream,
+                                outcome.encryption_key(),
+                                outcome.decryption_key(),
+                                outcome.encryption_nonce(),
+                                outcome.decryption_nonce())))
     }
 }
 
@@ -101,21 +97,16 @@ impl<S: AsyncRead + AsyncWrite> OwningClient<S> {
 }
 
 impl<S: AsyncRead + AsyncWrite> Future for OwningClient<S> {
-    type Item = Result<BoxDuplex<S>, (ClientHandshakeFailure, S)>;
-    type Error = (io::Error, S);
+    type Item = BoxDuplex<S>;
+    type Error = (HandshakeError, S);
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let (res, stream) = try_ready!(self.0.poll());
-        match res {
-            Ok(outcome) => {
-                Ok(Async::Ready(Ok(BoxDuplex::new(stream,
-                                                  outcome.encryption_key(),
-                                                  outcome.decryption_key(),
-                                                  outcome.encryption_nonce(),
-                                                  outcome.decryption_nonce()))))
-            }
-            Err(failure) => Ok(Async::Ready(Err((failure, stream)))),
-        }
+    fn poll(&mut self, cx: &mut Context) -> Poll<Self::Item, Self::Error> {
+        let (outcome, stream) = try_ready!(self.0.poll(cx));
+        Ok(Ready(BoxDuplex::new(stream,
+                                outcome.encryption_key(),
+                                outcome.decryption_key(),
+                                outcome.encryption_nonce(),
+                                outcome.decryption_nonce())))
     }
 }
 
@@ -149,22 +140,17 @@ impl<'a, S: AsyncRead + AsyncWrite> Server<'a, S> {
 impl<'a, S: AsyncRead + AsyncWrite> Future for Server<'a, S> {
     /// On success, the result contains the encrypted connection and the
     /// longterm public key of the client.
-    type Item = Result<(BoxDuplex<S>, sign::PublicKey), (ServerHandshakeFailure, S)>;
-    type Error = (io::Error, S);
+    type Item = (BoxDuplex<S>, sign::PublicKey);
+    type Error = (HandshakeError, S);
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let (res, stream) = try_ready!(self.0.poll());
-        match res {
-            Ok(outcome) => {
-                Ok(Async::Ready(Ok((BoxDuplex::new(stream,
-                                                   outcome.encryption_key(),
-                                                   outcome.decryption_key(),
-                                                   outcome.encryption_nonce(),
-                                                   outcome.decryption_nonce()),
-                                    outcome.peer_longterm_pk()))))
-            }
-            Err(failure) => Ok(Async::Ready(Err((failure, stream)))),
-        }
+    fn poll(&mut self, cx: &mut Context) -> Poll<Self::Item, Self::Error> {
+        let (outcome, stream) = try_ready!(self.0.poll(cx));
+        Ok(Ready((BoxDuplex::new(stream,
+                                 outcome.encryption_key(),
+                                 outcome.decryption_key(),
+                                 outcome.encryption_nonce(),
+                                 outcome.decryption_nonce()),
+                  outcome.peer_longterm_pk())))
     }
 }
 
@@ -175,7 +161,7 @@ impl<'a, S: AsyncRead + AsyncWrite> Future for Server<'a, S> {
 pub struct OwningServer<S>(OwningServerHandshaker<S>);
 
 impl<S: AsyncRead + AsyncWrite> OwningServer<S> {
-    /// Create a new `Server` to accept a connection from a client which knows
+    /// Create a new `OwningServer` to accept a connection from a client which knows
     /// the server's public key and uses the right app key over the given
     /// `stream`.
     ///
@@ -202,22 +188,17 @@ impl<S: AsyncRead + AsyncWrite> OwningServer<S> {
 impl<S: AsyncRead + AsyncWrite> Future for OwningServer<S> {
     /// On success, the result contains the encrypted connection and the
     /// longterm public key of the client.
-    type Item = Result<(BoxDuplex<S>, sign::PublicKey), (ServerHandshakeFailure, S)>;
-    type Error = (io::Error, S);
+    type Item = (BoxDuplex<S>, sign::PublicKey);
+    type Error = (HandshakeError, S);
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let (res, stream) = try_ready!(self.0.poll());
-        match res {
-            Ok(outcome) => {
-                Ok(Async::Ready(Ok((BoxDuplex::new(stream,
-                                                   outcome.encryption_key(),
-                                                   outcome.decryption_key(),
-                                                   outcome.encryption_nonce(),
-                                                   outcome.decryption_nonce()),
-                                    outcome.peer_longterm_pk()))))
-            }
-            Err(failure) => Ok(Async::Ready(Err((failure, stream)))),
-        }
+    fn poll(&mut self, cx: &mut Context) -> Poll<Self::Item, Self::Error> {
+        let (outcome, stream) = try_ready!(self.0.poll(cx));
+        Ok(Ready((BoxDuplex::new(stream,
+                                 outcome.encryption_key(),
+                                 outcome.decryption_key(),
+                                 outcome.encryption_nonce(),
+                                 outcome.decryption_nonce()),
+                  outcome.peer_longterm_pk())))
     }
 }
 
@@ -233,7 +214,7 @@ impl<'a, S, FilterFn, AsyncBool> ServerFilter<'a, S, FilterFn, AsyncBool>
           FilterFn: FnOnce(&sign::PublicKey) -> AsyncBool,
           AsyncBool: Future<Item = bool>
 {
-    /// Create a new `Server` to accept a connection from a client which knows
+    /// Create a new `ServerFilter` to accept a connection from a client which knows
     /// the server's public key, uses the right app key over the given `stream`
     /// and whose longterm public key is accepted by the filter function.
     ///
@@ -264,22 +245,17 @@ impl<'a, S, FilterFn, AsyncBool> Future for ServerFilter<'a, S, FilterFn, AsyncB
 {
     /// On success, the result contains the encrypted connection and the
     /// longterm public key of the client.
-    type Item = Result<(BoxDuplex<S>, sign::PublicKey), (ServerHandshakeFailureWithFilter, S)>;
-    type Error = (ServerHandshakeError<AsyncBool::Error>, S);
+    type Item = (BoxDuplex<S>, sign::PublicKey);
+    type Error = (FilteringHandshakeError<AsyncBool::Error>, S);
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let (res, stream) = try_ready!(self.0.poll());
-        match res {
-            Ok(outcome) => {
-                Ok(Async::Ready(Ok((BoxDuplex::new(stream,
-                                                   outcome.encryption_key(),
-                                                   outcome.decryption_key(),
-                                                   outcome.encryption_nonce(),
-                                                   outcome.decryption_nonce()),
-                                    outcome.peer_longterm_pk()))))
-            }
-            Err(failure) => Ok(Async::Ready(Err((failure, stream)))),
-        }
+    fn poll(&mut self, cx: &mut Context) -> Poll<Self::Item, Self::Error> {
+        let (outcome, stream) = try_ready!(self.0.poll(cx));
+        Ok(Ready((BoxDuplex::new(stream,
+                                 outcome.encryption_key(),
+                                 outcome.decryption_key(),
+                                 outcome.encryption_nonce(),
+                                 outcome.decryption_nonce()),
+                  outcome.peer_longterm_pk())))
     }
 }
 
@@ -296,7 +272,7 @@ impl<S, FilterFn, AsyncBool> OwningServerFilter<S, FilterFn, AsyncBool>
           FilterFn: FnOnce(&sign::PublicKey) -> AsyncBool,
           AsyncBool: Future<Item = bool>
 {
-    /// Create a new `Server` to accept a connection from a client which knows
+    /// Create a new `OwningServerFilter` to accept a connection from a client which knows
     /// the server's public key, uses the right app key over the given `stream`
     /// and whose longterm public key is accepted by the filter function.
     ///
@@ -329,21 +305,16 @@ impl<S, FilterFn, AsyncBool> Future for OwningServerFilter<S, FilterFn, AsyncBoo
 {
     /// On success, the result contains the encrypted connection and the
     /// longterm public key of the client.
-    type Item = Result<(BoxDuplex<S>, sign::PublicKey), (ServerHandshakeFailureWithFilter, S)>;
-    type Error = (ServerHandshakeError<AsyncBool::Error>, S);
+    type Item = (BoxDuplex<S>, sign::PublicKey);
+    type Error = (FilteringHandshakeError<AsyncBool::Error>, S);
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let (res, stream) = try_ready!(self.0.poll());
-        match res {
-            Ok(outcome) => {
-                Ok(Async::Ready(Ok((BoxDuplex::new(stream,
-                                                   outcome.encryption_key(),
-                                                   outcome.decryption_key(),
-                                                   outcome.encryption_nonce(),
-                                                   outcome.decryption_nonce()),
-                                    outcome.peer_longterm_pk()))))
-            }
-            Err(failure) => Ok(Async::Ready(Err((failure, stream)))),
-        }
+    fn poll(&mut self, cx: &mut Context) -> Poll<Self::Item, Self::Error> {
+        let (outcome, stream) = try_ready!(self.0.poll(cx));
+        Ok(Ready((BoxDuplex::new(stream,
+                                 outcome.encryption_key(),
+                                 outcome.decryption_key(),
+                                 outcome.encryption_nonce(),
+                                 outcome.decryption_nonce()),
+                  outcome.peer_longterm_pk())))
     }
 }
